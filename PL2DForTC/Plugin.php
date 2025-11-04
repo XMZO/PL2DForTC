@@ -448,11 +448,6 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
     /* 插件实现方法 */
     public static function header()
     {
-        // 检查是否完全禁用小屏资源加载
-        if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen == 'disable') {
-            return;
-        }
-        
         // 头
         $CSS_hear = '';
         if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->canvas_CSS) {
@@ -462,13 +457,19 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
         };
 
         $small_screen_incss = '';
-        if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen == 'hide') {
+        $small_screen_mode = Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen;
+        
+        if ($small_screen_mode == 'hide') {
             if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen_num) {
                 $small_screen_incss = '@media screen and (max-width: ' . Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen_num . 'px){ #PL2DForTC{ display:none; }';
             } else {
                 $small_screen_incss = '@media screen and (max-width: 768px){ #PL2DForTC{ display:none; }';
             }
-        };
+        } elseif ($small_screen_mode == 'disable') {
+            // 完全禁用模式：使用媒体查询在小屏时隐藏容器
+            $threshold = Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen_num ?: 768;
+            $small_screen_incss = '@media screen and (max-width: ' . $threshold . 'px){ #PL2DForTC, #PL2DForTC-div{ display:none !important; }';
+        }
 
         echo '<style>
         #PL2DForTC{ left: 0;vertical-align: middle; z-index: ' . Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->canvas_Z_index . ';}'
@@ -480,16 +481,38 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
     }
     public static function footer()
     {
-        // 检查是否完全禁用小屏资源加载
-        if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen == 'disable') {
-            return;
-        }
-        
         //尾
+        $small_screen_mode = Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen;
+        $threshold = Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen_num ?: 768;
+        
+        // 如果是完全禁用模式，先检测屏幕宽度
+        if ($small_screen_mode == 'disable') {
+            echo '<script>
+            (function() {
+                // 检测屏幕宽度，只在大屏时加载资源
+                if (window.matchMedia("(min-width: ' . $threshold . 'px)").matches) {
+                    // 屏幕宽度大于等于阈值，继续加载
+                    window.PL2DForTC_shouldLoad = true;
+                } else {
+                    // 屏幕宽度小于阈值，不加载
+                    window.PL2DForTC_shouldLoad = false;
+                    console.log("PL2DForTC: 小屏幕模式，已禁用Live2D资源加载");
+                }
+            })();
+            </script>' . "\n";
+            
+            // 如果不应该加载，直接返回
+            echo '<script>if (!window.PL2DForTC_shouldLoad) { document.write = function() {}; }</script>' . "\n";
+        }
 
         global $package, $version;
         $ppd = Helper::options()->pluginUrl;
 
+        // 如果是完全禁用模式，将资源加载包裹在条件判断中
+        if ($small_screen_mode == 'disable') {
+            echo '<script>if (window.PL2DForTC_shouldLoad) {</script>' . "\n";
+        }
+        
         echo '<div id="PL2DForTC-div" class="PL2DForTC-div ' . Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->position . '"><canvas id="PL2DForTC"></canvas></div>';
         echo "<script src='" . $ppd . "/PL2DForTC/js/live2dcubismcore.min.js'></script>" . "\n";
         echo "<script src='" . $ppd . "/PL2DForTC/js/live2d.min.js'></script>" . "\n";
@@ -553,5 +576,10 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
         })();' .
 
             '</script>' . "\n";
+        
+        // 如果是完全禁用模式，关闭条件判断
+        if ($small_screen_mode == 'disable') {
+            echo '<script>}</script>' . "\n";
+        }
     }
 }
