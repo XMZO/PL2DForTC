@@ -334,9 +334,10 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
         $form->addInput($small_screen_num);
 
         $small_screen = new Typecho_Widget_Helper_Form_Element_Radio('small_screen', array(
-            true => '开启(小屏隐藏)',
-            false => '关闭(小屏不隐藏)'
-        ), false, '开启小屏幕(手机)模型隐藏', '是否开启小屏幕(手机)模型隐藏? 开启后屏幕宽度小于 开启条件数值(px) 将隐藏模型');
+            'hide' => '仅隐藏(CSS隐藏，仍加载资源)',
+            'disable' => '完全禁用(不加载任何资源，推荐)',
+            'off' => '关闭(小屏正常显示)'
+        ), 'off', '小屏幕处理方式', '仅隐藏: 使用CSS隐藏但仍会加载所有资源<br>完全禁用: 不加载任何Live2D资源，可大幅减少小屏设备流量消耗(推荐)<br>关闭: 小屏幕正常显示模型');
         $small_screen->setAttribute('class', 'P-ul P-ul-radio nav-bar-2');
         $form->addInput($small_screen);
 
@@ -447,6 +448,11 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
     /* 插件实现方法 */
     public static function header()
     {
+        // 检查是否完全禁用小屏资源加载
+        if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen == 'disable') {
+            return;
+        }
+        
         // 头
         $CSS_hear = '';
         if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->canvas_CSS) {
@@ -456,7 +462,7 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
         };
 
         $small_screen_incss = '';
-        if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen == true) {
+        if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen == 'hide') {
             if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen_num) {
                 $small_screen_incss = '@media screen and (max-width: ' . Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen_num . 'px){ #PL2DForTC{ display:none; }';
             } else {
@@ -474,6 +480,11 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
     }
     public static function footer()
     {
+        // 检查是否完全禁用小屏资源加载
+        if (Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen == 'disable') {
+            return;
+        }
+        
         //尾
 
         global $package, $version;
