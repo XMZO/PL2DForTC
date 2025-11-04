@@ -445,6 +445,39 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
     {
     }
 
+    /**
+     * 检测是否为移动设备（手机）
+     * @return bool true表示手机设备，false表示平板/桌面设备
+     */
+    private static function isMobileDevice()
+    {
+        if (!isset($_SERVER['HTTP_USER_AGENT'])) {
+            return false;
+        }
+        
+        $userAgent = $_SERVER['HTTP_USER_AGENT'];
+        
+        // 排除平板设备
+        if (preg_match('/(iPad|Tablet|PlayBook)/i', $userAgent)) {
+            return false;
+        }
+        
+        // 检测手机关键词
+        $mobileKeywords = array('Mobile', 'iPhone', 'iPod', 'BlackBerry', 'Windows Phone', 'Opera Mini', 'IEMobile');
+        foreach ($mobileKeywords as $keyword) {
+            if (stripos($userAgent, $keyword) !== false) {
+                return true;
+            }
+        }
+        
+        // 特殊处理Android：只有包含"Mobile"的才算手机
+        if (stripos($userAgent, 'Android') !== false && stripos($userAgent, 'Mobile') !== false) {
+            return true;
+        }
+        
+        return false;
+    }
+
     /* 插件实现方法 */
     public static function header()
     {
@@ -466,9 +499,23 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
                 $small_screen_incss = '@media screen and (max-width: 768px){ #PL2DForTC{ display:none; }';
             }
         } elseif ($small_screen_mode == 'disable') {
-            // 完全禁用模式：使用媒体查询在小屏时隐藏容器
+            // 完全禁用模式：混合检测（Cookie + User-Agent）
             $threshold = Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen_num ?: 768;
-            $small_screen_incss = '@media screen and (max-width: ' . $threshold . 'px){ #PL2DForTC, #PL2DForTC-div{ display:none !important; }';
+            $isSmallScreen = false;
+            
+            // 检查Cookie
+            if (isset($_COOKIE['PL2DForTC_screenWidth'])) {
+                $screenWidth = intval($_COOKIE['PL2DForTC_screenWidth']);
+                $isSmallScreen = ($screenWidth > 0 && $screenWidth < $threshold);
+            } else {
+                // Cookie不存在，使用User-Agent检测
+                $isSmallScreen = self::isMobileDevice();
+            }
+            
+            // 只有确定是小屏时才隐藏
+            if ($isSmallScreen) {
+                $small_screen_incss = '@media screen and (max-width: ' . $threshold . 'px){ #PL2DForTC, #PL2DForTC-div{ display:none !important; }';
+            }
         }
 
         echo '<style>
@@ -485,33 +532,28 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
         $small_screen_mode = Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen;
         $threshold = Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->small_screen_num ?: 768;
         
-        // 如果是完全禁用模式，先检测屏幕宽度
+        // 如果是完全禁用模式，混合检测（Cookie + User-Agent）
         if ($small_screen_mode == 'disable') {
-            echo '<script>
-            (function() {
-                // 检测屏幕宽度，只在大屏时加载资源
-                if (window.matchMedia("(min-width: ' . $threshold . 'px)").matches) {
-                    // 屏幕宽度大于等于阈值，继续加载
-                    window.PL2DForTC_shouldLoad = true;
-                } else {
-                    // 屏幕宽度小于阈值，不加载
-                    window.PL2DForTC_shouldLoad = false;
-                    console.log("PL2DForTC: 小屏幕模式，已禁用Live2D资源加载");
-                }
-            })();
-            </script>' . "\n";
+            $isSmallScreen = false;
             
-            // 如果不应该加载，直接返回
-            echo '<script>if (!window.PL2DForTC_shouldLoad) { document.write = function() {}; }</script>' . "\n";
+            // 检查Cookie
+            if (isset($_COOKIE['PL2DForTC_screenWidth'])) {
+                $screenWidth = intval($_COOKIE['PL2DForTC_screenWidth']);
+                $isSmallScreen = ($screenWidth > 0 && $screenWidth < $threshold);
+            } else {
+                // Cookie不存在，使用User-Agent检测
+                $isSmallScreen = self::isMobileDevice();
+            }
+            
+            // 只有确定是小屏时才return，否则正常输出
+            if ($isSmallScreen) {
+                echo '<script>console.log("PL2DForTC: 检测到小屏设备，已禁用Live2D资源加载");</script>' . "\n";
+                return;
+            }
         }
 
         global $package, $version;
         $ppd = Helper::options()->pluginUrl;
-
-        // 如果是完全禁用模式，将资源加载包裹在条件判断中
-        if ($small_screen_mode == 'disable') {
-            echo '<script>if (window.PL2DForTC_shouldLoad) {</script>' . "\n";
-        }
         
         echo '<div id="PL2DForTC-div" class="PL2DForTC-div ' . Typecho_Widget::widget('Widget_Options')->Plugin('PL2DForTC')->position . '"><canvas id="PL2DForTC"></canvas></div>';
         echo "<script src='" . $ppd . "/PL2DForTC/js/live2dcubismcore.min.js'></script>" . "\n";
@@ -577,9 +619,13 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
 
             '</script>' . "\n";
         
-        // 如果是完全禁用模式，关闭条件判断
-        if ($small_screen_mode == 'disable') {
-            echo '<script>}</script>' . "\n";
-        }
+        // 设置Cookie记录屏幕宽度（30天有效期）
+        echo '<script>
+        (function() {
+            if (!document.cookie.match(/PL2DForTC_screenWidth=/)) {
+                document.cookie = "PL2DForTC_screenWidth=" + window.screen.width + "; path=/; max-age=2592000";
+            }
+        })();
+        </script>' . "\n";
     }
 }
