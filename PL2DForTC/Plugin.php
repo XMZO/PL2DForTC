@@ -555,4 +555,3 @@ class PL2DForTC_Plugin implements Typecho_Plugin_Interface
             '</script>' . "\n";
     }
 }
-
